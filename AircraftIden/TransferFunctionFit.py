@@ -266,49 +266,23 @@ class TransferFunctionFit(object):
 
         J_min_max = 1000000
         J_min = J_min_max
-
-        cpu_use = multiprocessing.cpu_count() - 1
-        if cpu_use < 2:
-            cpu_use = 2
-        pool = multiprocessing.Pool(cpu_use)
-
-        results = []
-        for i in range(self.iter_times):
-            result = pool.apply_async(self.solve)
-            results.append(result)
-
-        should_exit_pool = False
+        
         print("Starting Estimate",end="")
-        try:
-            while not should_exit_pool:
-                if results.__len__() == 0:
-                    print("All in pool finish")
-                    break
-                for i in range(results.__len__()):
-                    thr = results[i]
-                    if thr.ready() and thr.successful():
-                        x_tmp,J  = thr.get()
-                        if J < J_min:
-                            J_min = J
-                            self.x = x_tmp
-                            self.setup_transferfunc(x_tmp)
-                            print("\r",end="")
-                            print("Found new better {}".format(J), end="")
+        for i in range(self.iter_times):
+            x_tmp,J = self.solve
+            if J < J_min:
+                J_min = J
+                self.x = x_tmp
+                self.setup_transferfunc(x_tmp)
+                print("\r",end="")
+                print("current cost of {}".format(J), end="")
 
-                        if J < accept_J:
-                            print("")
-                            pool.terminate()
-                            return self.tf
-
-                        del results[i]
-                        break
-                time.sleep(0.01)
-            pool.terminate()
-        except KeyboardInterrupt:
-            print("KeyboardInterrupt, exit thread pools")
-            pool.terminate()
-            pool.join()
-            raise
+            if J < accept_J:
+                print("")
+                print("final cost of {}".format(J), end="")                
+                return self.tf
+        
+        print("max iteration achieved cost of {}".format(J), end="")       
         return self.tf
 
     def setup_transferfunc(self, x):
