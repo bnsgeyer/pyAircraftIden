@@ -269,7 +269,8 @@ class TransferFunctionFit(object):
         
         print("Starting Estimate",end="")
         for i in range(self.iter_times):
-            x_tmp,J = self.solve
+            self.solve()
+#            J = self.cost_func()
             if J < J_min:
                 J_min = J
                 self.x = x_tmp
