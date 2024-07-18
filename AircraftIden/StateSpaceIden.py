@@ -47,6 +47,7 @@ class StateSpaceIdenSIMO(object):
     def print_res(self):
         assert self.x_best is not None, "You must estimate first"
         x_syms = self.sspm.solve_params_from_newparams(self.x_best)
+        print(self.J_min)
         print(x_syms)
         sym_sub = dict(zip(self.x_syms, self.x_best))
         ssm = self.sspm.get_ssm_by_syms(sym_sub, using_converted=True)
@@ -71,7 +72,7 @@ class StateSpaceIdenSIMO(object):
             except ValueError as e:
                 raise ValueError(f"Error: Symbol {param2} not found in self.x_syms. Cannot continue.") from e
 
-    def estimate(self, sspm: StateSpaceParamModel, syms, omg_min=None, omg_max=None, constant_defines=None, rand_init_max = 1, bounds=None):
+    def estimate(self, sspm: StateSpaceParamModel, syms, omg_min=None, omg_max=None, constant_defines=None, rand_init_max = 1, bounds=None, initvals=None):
         assert self.y_dims == sspm.y_dims, "StateSpaceModel dim : {} need to iden must have same dims with Hs {}".format(
             sspm.y_dims, self.y_dims)
 
@@ -87,6 +88,11 @@ class StateSpaceIdenSIMO(object):
             self.lower_bnd=bounds[0]
             self.upper_bnd=bounds[1]
 
+        if initvals is None:
+            self.initx0 = None
+        else:
+            self.initx0 = initvals
+
         self.syms = syms
         sspm.load_constant_defines(constant_defines)
         self.x_syms = list(sspm.get_new_params())
@@ -98,14 +104,20 @@ class StateSpaceIdenSIMO(object):
         if self.max_sample_times > 1:
             J, x = self.parallel_solve(sspm)
         else:
+            J_min = 10000
             self.sspm = sspm
-            J, x = self.solve(0)
+            for l in range(1000):
+                J, x = self.solve(l)
+                if J < J_min:
+                    self.initx0 = x
+                    J_min = J
+                    self.J_min = J_min
+                    self.x_best = x
+                else:
+                    self.initx0 = None
 
         x_syms = sspm.solve_params_from_newparams(x)
         # print("J : {} syms {}".format(J, x_syms))
-
-        self.x_best = x
-        self.J_min = J
 
         if self.enable_debug_plot:
             self.draw_freq_res()
@@ -236,10 +248,14 @@ class StateSpaceIdenSIMO(object):
         con = {'type': 'ineq', 'fun': lambda x: self.constrain_func(sspm,x)}
         opts = {'maxiter':10000}
 
-        #print("{} using init {}".format(id, x0))
+        #print("cost function = {}".format(f))
         sys.stdout.flush()
 
-        x0 = self.setup_initvals(sspm)
+        if self.initx0 is None:
+            x0 = self.setup_initvals(sspm)
+        else:
+            x0 = self.initx0
+
         bnds = None
         bnds = []
         print("{} using init {}".format(id, x0))            
